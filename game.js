@@ -35,7 +35,7 @@ camera.position.set(0, 4.2, 7.5);
 // ---------- Textures ----------
 const loader = new THREE.TextureLoader();
 const aniso = renderer.capabilities.getMaxAnisotropy();
-const NAMES_ALL = ['tex_sandstone.jpg', 'tex_cobble.jpg', 'tex_facade1.jpg', 'tex_facade2.jpg', 'bg_bethlehem.jpg', ...['run0', 'run1', 'jump', 'slide', 'coin', 'scroll', 'lamp', 'sandals', 'shield', 'magnet', 'camel', 'donkey', 'cart', 'baskets', 'olive', 'palm', 'stall', 'pots', 'stable'].map(n => n + '.png')];
+const NAMES_ALL = ['tex_sandstone.jpg', 'tex_cobble.jpg', 'tex_facade1.jpg', 'tex_facade2.jpg', 'bg_bethlehem.jpg', ...['run0', 'run1', 'jump', 'slide', 'coin', 'scroll', 'lamp', 'sandals', 'shield', 'magnet', 'camel', 'donkey', 'cart', 'baskets', 'olive', 'palm', 'stall', 'pots', 'stable', 'gabriel', 'inn', 'shepherds', 'magi'].map(n => n + '.png')];
 const CACHE = {};
 await Promise.all(NAMES_ALL.map(async n => { CACHE[n] = await loader.loadAsync('assets/' + n); }));
 function load(name, rx = 1, ry = 1) {
@@ -56,7 +56,7 @@ const TX = {
   facades: [load('tex_facade1.jpg'), load('tex_facade2.jpg')], bg: load('bg_bethlehem.jpg'),
 };
 const SPR = {};
-for (const n of ['run0', 'run1', 'jump', 'slide', 'coin', 'scroll', 'lamp', 'sandals', 'shield', 'magnet', 'camel', 'donkey', 'cart', 'baskets', 'olive', 'palm', 'stall', 'pots', 'stable']) SPR[n] = load(n + '.png');
+for (const n of ['run0', 'run1', 'jump', 'slide', 'coin', 'scroll', 'lamp', 'sandals', 'shield', 'magnet', 'camel', 'donkey', 'cart', 'baskets', 'olive', 'palm', 'stall', 'pots', 'stable', 'gabriel', 'inn', 'shepherds', 'magi']) SPR[n] = load(n + '.png');
 function sandTex(w, h) { const t = TX.sand.clone(); t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(Math.max(1, w / 3.5), Math.max(1, h / 3.5)); t.needsUpdate = true; return t; }
 
 // Toon gradient (soft 3-band painted shading)
@@ -279,14 +279,26 @@ function randomizeSeg(seg, plain) {
 }
 
 // ---------- Nativity stable set piece (distance milestones) ----------
-const STABLE_FIRST = 800, STABLE_EVERY = 1000, STABLE_SPAWN_Z = -200;
-const stable = { g: new THREE.Group(), active: false, z: 0, side: 1, reached: false, next: STABLE_FIRST };
+// The Christmas story told along the road, in order, then repeating every STORY_CYCLE miles.
+const STORY = [
+  { key: 'gabriel', at: 300, h: 7.4, title: 'The angel visits Mary', verse: '“Do not be afraid, Mary. God is very pleased with you … You must call him Jesus.”', ref: 'Luke 1:30-31', bonus: 400, coins: 10, star: false },
+  { key: 'inn', at: 600, h: 8.0, title: 'No room at the inn', verse: '“She placed him in a manger. That’s because there was no guest room where they could stay.”', ref: 'Luke 2:7', bonus: 500, coins: 10, star: false },
+  { key: 'shepherds', at: 900, h: 8.2, title: 'Good news for the shepherds!', verse: '“Do not be afraid. I bring you good news. It will bring great joy for all the people.”', ref: 'Luke 2:10', bonus: 600, coins: 15, star: false },
+  { key: 'stable', at: 1200, h: 8.2, title: 'You reached the stable!', verse: '“Today in the town of David a Savior has been born to you.”', ref: 'Luke 2:11', bonus: 1000, coins: 25, star: true },
+  { key: 'magi', at: 1500, h: 7.6, title: 'The Wise Men follow the star', verse: '“When they saw the star, they were filled with joy … They gave him gold, frankincense and myrrh.”', ref: 'Matthew 2:10-11', bonus: 800, coins: 20, star: true },
+];
+const STORY_CYCLE = 1500, STABLE_SPAWN_Z = -200, STORY_LEAD = 190;
+const STORY_MODE_AT = [200, 430, 660, 890, 1120], STORY_SPEED = 15; // Story Mode: closer scenes, gentle constant speed, ends after the Wise Men
+function storyAt(i) { const n = STORY.length; if (S.story) return { sc: STORY[Math.min(i, n - 1)], d: i < n ? STORY_MODE_AT[i] : Infinity }; return { sc: STORY[i % n], d: Math.floor(i / n) * STORY_CYCLE + STORY[i % n].at }; }
+function storyIndexFrom(d) { let i = 0; while (storyAt(i).d - STORY_LEAD < d) i++; return i; }
+const stable = { g: new THREE.Group(), active: false, z: 0, side: 1, reached: false, idx: 0, sc: STORY[3], sprs: {} };
 {
   const g = stable.g; g.visible = false; scene.add(g);
-  stable.spr = billboard('stable', 8.2, g, 0, 0); stable.spr.castShadow = true;
+  for (const sc of STORY) { const m = billboard(sc.key, sc.h, g, 0, 0); m.castShadow = true; m.visible = false; stable.sprs[sc.key] = m; }
+  stable.spr = stable.sprs.stable;
   // glowing straw / lantern warmth
   const straw = glowSprite(0xffc04a, 3.6); straw.position.set(0, 1.5, 0.6); g.add(straw); stable.straw = straw;
-  const warm = glowSprite(0xff9a30, 6); warm.position.set(0, 3, 0.3); g.add(warm);
+  const warm = glowSprite(0xff9a30, 6); warm.position.set(0, 3, 0.3); g.add(warm); stable.warm = warm;
   // star directly above + beam of light
   const st = new THREE.Sprite(new THREE.SpriteMaterial({ map: starTex, blending: THREE.AdditiveBlending, depthWrite: false, transparent: true, fog: false })); st.scale.set(16, 16, 1); st.position.set(0, 21, 0); g.add(st); stable.star = st;
   const beamG = new THREE.CylinderGeometry(0.35, 2.2, 14, 32, 1, true); beamG.translate(0, 7 + 7.5, 0);
@@ -295,7 +307,9 @@ const stable = { g: new THREE.Group(), active: false, z: 0, side: 1, reached: fa
   const beam = new THREE.Mesh(beamG, noOutline(new THREE.MeshBasicMaterial({ vertexColors: true, transparent: true, opacity: 0.2, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide, fog: false })));
   g.add(beam); stable.beam = beam;
 }
-function spawnStable() { stable.active = true; stable.reached = false; stable.side = Math.random() < 0.5 ? -1 : 1; stable.z = STABLE_SPAWN_Z; stable.g.position.set(stable.side * 8.0, 0, stable.z); stable.spr.userData.fixed = -stable.side * 0.45; stable.g.visible = true; }
+function spawnStable() { const { sc } = storyAt(stable.idx); stable.sc = sc; for (const k in stable.sprs) stable.sprs[k].visible = k === sc.key; stable.spr = stable.sprs[sc.key];
+  stable.star.visible = stable.beam.visible = sc.star; stable.straw.visible = stable.warm.visible = sc.key === 'stable' || sc.key === 'inn';
+  stable.active = true; stable.reached = false; stable.side = Math.random() < 0.5 ? -1 : 1; stable.z = STABLE_SPAWN_Z; stable.g.position.set(stable.side * 8.0, 0, stable.z); stable.spr.userData.fixed = -stable.side * 0.45; stable.g.visible = true; }
 function hideStable() { stable.active = false; stable.g.visible = false; for (const seg of segments) { seg.L.forEach((o, k) => o.visible = k === seg.a); seg.R.forEach((o, k) => o.visible = k === seg.b); } }
 function updateStable(dz, t) {
   if (!stable.active) return;
@@ -308,15 +322,17 @@ function updateStable(dz, t) {
   if (stable.z > 30) hideStable();
 }
 function reachStable() {
-  const bonus = 1000 * S.mult; S.score += bonus; S.coins += 25;
+  const sc = stable.sc, bonus = sc.bonus * S.mult; S.score += bonus; S.coins += sc.coins;
   Sfx.power(); emit(stable.side * 5, 3, -1, 80, 0xffe066, 9, 0.6, 1.2, 3);
-  const b = $('banner'); b.innerHTML = `<b>You reached the stable!</b><span>“Today in the town of David a Savior has been born to you.” Luke 2:11 (NIrV)</span><i>+${bonus.toLocaleString()} &bull; +25 coins</i>`;
-  b.classList.add('show'); bannerT = 4.2;
+  const b = $('banner'); b.innerHTML = `<b>${sc.title}</b><span>${sc.verse} ${sc.ref} (NIrV)</span><i>+${bonus.toLocaleString()} &bull; +${sc.coins} coins</i>`;
+  b.classList.add('show'); bannerT = S.story ? 6.5 : 4.2;
+  if (S.story && sc.key === STORY[STORY.length - 1].key) S.endT = 7.5;
 }
 let bannerT = 0;
 // ---------- Weather phases (distance-driven snow cycle) ----------
-// per 1000-mile cycle: clear start, snow from 150 to 620, clear starry sky around the stable (800), repeat
-function snowTarget(d) { const c = d % STABLE_EVERY; return (c > 150 && c < 620) ? 1 : 0; }
+// per 1500-mile story cycle: snow between Gabriel (300) and the inn (600), again between the shepherds (900) and the stable;
+// clear starry sky for the shepherds, the stable (1200) and the Wise Men following the star (1500)
+function snowTarget(d) { if (S.story) return (d > 250 && d < 380) || (d > 700 && d < 820) ? 1 : 0; const c = d % STORY_CYCLE; return ((c > 340 && c < 560) || (c > 940 && c < 1080)) ? 1 : 0; }
 const W = { snow: 0 };
 // ---------- Player (painted billboard sprite) ----------
 const player = new THREE.Group(); scene.add(player);
@@ -555,9 +571,9 @@ function clearWorld() {
 }
 function resetRun() {
   clearWorld();
-  Object.assign(S, { lane: 1, x: 0, y: 0, vy: 0, sliding: 0, speed: BASE_SPEED, dist: 0, score: 0, coins: 0, mult: 1, runT: 0, dead: 0, shake: 0, invuln: 0, nextRow: -45 });
+  Object.assign(S, { endT: 0, lane: 1, x: 0, y: 0, vy: 0, sliding: 0, speed: BASE_SPEED, dist: 0, score: 0, coins: 0, mult: 1, runT: 0, dead: 0, shake: 0, invuln: 0, nextRow: -45 });
   if (Q.has('start')) S.dist = +Q.get('start') || 0;
-  hideStable(); { let n = STABLE_FIRST; while (n - 190 < S.dist) n += STABLE_EVERY; stable.next = n; } W.snow = snowTarget(S.dist); bannerT = 0; $('banner').classList.remove('show');
+  hideStable(); stable.idx = storyIndexFrom(S.dist); W.snow = snowTarget(S.dist); bannerT = 0; $('banner').classList.remove('show');
   S.power = { sandals: 0, shield: 0, magnet: 0 };
   player.position.set(0, 0, 0); P.body.rotation.set(0, 0, 0);
   // pre-populate
@@ -576,6 +592,12 @@ function spawnRow(z) {
   const d = S.dist;
   const r = Math.random();
   const lanes = [0, 1, 2].sort(() => Math.random() - 0.5);
+  if (S.story) { // center lane always open: coins down the middle, a few harmless roadside props in the side lanes
+    if (Math.random() < 0.7) coinLine(1, z - 6, 5);
+    if (Math.random() < 0.35) spawnOb(pick(['baskets', 'cart']), Math.random() < 0.5 ? 0 : 2, z);
+    if (Math.random() < 0.08) spawnItem('lamp', LANES[1], 1.0, z + 7);
+    return;
+  }
   const hard = Math.min(1, d / 2500);
   if (r < 0.12 && d > 150) { // full-width awning -> slide
     spawnOb('awning', 1, z); coinLine(lanes[0], z - 3, 4); for (const it of items.slice(-4)) { it.y = 0.6; it.g.position.y = 0.6; }
@@ -612,11 +634,11 @@ addEventListener('keydown', e => {
   const k = e.key;
   if (['ArrowLeft', 'a', 'A'].includes(k)) act('left');
   else if (['ArrowRight', 'd', 'D'].includes(k)) act('right');
-  else if (['ArrowUp', 'w', 'W', ' '].includes(k)) { act('up'); if (S.state === 'menu' || S.state === 'over') { if (k === ' ') startGame(); } }
+  else if (['ArrowUp', 'w', 'W', ' '].includes(k)) { act('up'); if (S.state === 'menu' || S.state === 'over') { if (k === ' ') startGame(false); } }
   else if (['ArrowDown', 's', 'S'].includes(k)) act('down');
   else if (k === 'p' || k === 'P' || k === 'Escape') togglePause();
   else if (k === 'm' || k === 'M') toggleMute();
-  else if (k === 'Enter' && (S.state === 'menu' || S.state === 'over')) startGame();
+  else if (k === 'Enter' && (S.state === 'menu' || S.state === 'over')) startGame(false);
   if (k.startsWith('Arrow') || k === ' ') e.preventDefault();
 });
 let tStart = null;
@@ -629,11 +651,13 @@ addEventListener('touchend', () => { tStart = null; });
 
 // ---------- UI ----------
 function show(id, on) { $(id).classList.toggle('hidden', !on); }
-function startGame() {
+function startGame(story) {
+  S.story = story === true; document.body.classList.toggle('storymode', S.story); show('endP', false);
   Sfx.init(); Sfx.startMusic();
   resetRun(); S.state = 'play';
   show('menu', false); show('over', false); show('paused', false); show('hud', true);
 }
+function storyEnd() { S.state = 'end'; $('banner').classList.remove('show'); bannerT = 0; show('endP', true); emit(0, 3, -4, 90, 0xffe066, 9, 0.6, 1.4, 3); }
 function gameOver() {
   S.state = 'over'; Sfx.stopMusic();
   const sc = Math.floor(S.score), nb = sc > S.best; if (nb) { S.best = sc; localStorage.setItem('bh_best', sc); }
@@ -662,7 +686,9 @@ document.addEventListener('input', e => { const inp = e.target; if (!inp.closest
   if ((k === 'coinsOn' && inp.checked) || k === 'sfxVol') Sfx.coin(); if (inp.type === 'checkbox') inp.blur(); syncSound(); });
 for (const ev of ['touchstart', 'touchmove', 'touchend', 'pointerdown', 'mousedown']) document.addEventListener(ev, e => { if (e.target.closest && e.target.closest('.snd, .sndbox')) e.stopPropagation(); }, { capture: true, passive: true });
 syncSound();
-$('playBtn').onclick = startGame; $('againBtn').onclick = startGame;
+$('playBtn').onclick = () => startGame(false); $('againBtn').onclick = () => startGame(S.story);
+$('storyBtn').onclick = () => startGame(true); $('endAgain').onclick = () => startGame(true);
+$('endMenu').onclick = () => { show('endP', false); show('hud', false); show('menu', true); S.state = 'menu'; S.story = false; document.body.classList.remove('storymode'); clearWorld(); hideStable(); };
 $('menuBtn').onclick = () => { show('over', false); show('hud', false); show('menu', true); S.state = 'menu'; clearWorld(); };
 $('resumeBtn').onclick = togglePause; $('pauseBtn').onclick = togglePause; $('muteBtn').onclick = toggleMute;
 $('verseToggle').onchange = e => { localStorage.setItem('bh_verse', e.target.checked ? '1' : '0'); show('verse', e.target.checked); };
@@ -692,10 +718,11 @@ function update(dt) {
   let speed = 0;
   if (playing && !S.dead) {
     S.runT += dt;
-    S.speed = Math.min(MAX_SPEED, BASE_SPEED + S.dist * 0.0075);
-    speed = S.speed * (S.power.sandals > 0 ? 1.45 : 1);
+    S.speed = S.story ? STORY_SPEED : Math.min(MAX_SPEED, BASE_SPEED + S.dist * 0.0075);
+    speed = S.speed * (S.power.sandals > 0 && !S.story ? 1.45 : 1);
     S.dist += speed * dt;
-    S.mult = 1 + Math.floor(S.dist / 500) + (S.power.sandals > 0 ? 1 : 0);
+    S.mult = S.story ? 1 : 1 + Math.floor(S.dist / 500) + (S.power.sandals > 0 ? 1 : 0);
+    if (S.endT > 0) { S.endT -= dt; if (S.endT <= 0) storyEnd(); }
     S.score += speed * dt * 0.5 * S.mult;
     for (const k in S.power) S.power[k] = Math.max(0, S.power[k] - dt);
     if (S.invuln > 0) S.invuln -= dt;
@@ -709,9 +736,9 @@ function update(dt) {
   for (let i = 0; i < DM; i++) { dPos[i * 3 + 2] += dz * 0.9; dPos[i * 3 + 1] -= dt * (0.9 + (i % 7) * 0.12) * (0.4 + 0.6 * W.snow); dPos[i * 3] += Math.sin(animT * 0.03 + i) * 0.004; if (dPos[i * 3 + 1] < 0) dPos[i * 3 + 1] += 8; if (dPos[i * 3 + 2] > 10) dPos[i * 3 + 2] -= 90; }
   star.material.rotation = Math.sin(performance.now() * 0.0004) * 0.03; { const tw = 1 + Math.sin(performance.now() * 0.003) * 0.04; star.scale.set(175 * tw, 175 * tw, 1); }
   dGeo.attributes.position.needsUpdate = true;
-  { const tgt = (S.state === 'play' || S.state === 'over' || S.state === 'paused') ? snowTarget(S.dist) : 1; W.snow += (tgt - W.snow) * (1 - Math.exp(-0.8 * dt));
+  { const tgt = (S.state === 'play' || S.state === 'over' || S.state === 'paused' || S.state === 'end') ? snowTarget(S.dist) : 1; W.snow += (tgt - W.snow) * (1 - Math.exp(-0.8 * dt));
     dust.material.opacity = 0.9 * W.snow; dust.visible = W.snow > 0.01; skyStars.material.opacity = 0.55 + 0.4 * (1 - W.snow); }
-  if (S.state === 'play' && !S.dead && !stable.active && S.dist >= stable.next - 190) { spawnStable(); stable.next += STABLE_EVERY; }
+  if (S.state === 'play' && !S.dead && !stable.active && S.dist >= storyAt(stable.idx).d - STORY_LEAD) { spawnStable(); stable.idx++; }
   updateStable(dz, performance.now() / 1000);
   if (bannerT > 0) { bannerT -= dt; if (bannerT <= 0) $('banner').classList.remove('show'); }
 
@@ -736,6 +763,7 @@ function update(dt) {
       if (!playing || S.dead) continue;
       const b = o.box, zc = o.z + (o.zoff || 0);
       if (pb.x1 > o.x - b.hw && pb.x0 < o.x + b.hw && pb.z1 > zc - b.hd && pb.z0 < zc + b.hd && pb.y1 > b.y0 && pb.y0 < b.y1) {
+        if (S.story) { if (!o.hitFx) { o.hitFx = 1; emit(o.x, 1, o.z, 14, 0xd9b783, 4, 0.4, 0.5); } continue; }
         if (GOD || S.power.sandals > 0 || S.invuln > 0) { if (S.power.sandals > 0 && !o.hitFx) { o.hitFx = 1; emit(o.x, 1, o.z, 30, 0xffb050, 7, 0.5, 0.6); } continue; }
         if (S.power.shield > 0) { S.power.shield = 0; S.invuln = 1.2; Sfx.shieldBreak(); emit(S.x, 1.2, 0, 50, 0x7fd0ff, 8, 0.5, 0.8); S.shake = 0.4; toast('Faith Protected You!'); continue; }
         S.dead = 1; S.deadT = 0; Sfx.crash(); S.shake = 0.8; emit(S.x, 1, -0.5, 40, 0xd9b783, 6, 0.6, 0.9);
@@ -837,4 +865,4 @@ const _wp = new THREE.Vector3(); let sdt = 1 / 60; if (Q.has('nooutline')) useOu
 S.state = 'menu'; show('loading', false);
 // spawn a few attract-mode items on menu
 frame();
-window.__game = { stable, W, camera, S, startGame, act, Sfx, renderer };
+window.__game = { storyEnd, STORY, stable, W, camera, S, startGame, act, Sfx, renderer };
