@@ -106,3 +106,14 @@ details.snd[open] summary{margin-bottom:6px}
 .endbtns{display:flex;gap:10px;justify-content:center;flex-wrap:wrap;margin-bottom:8px}
 .btn.ghost{background:#fff4cf;color:#3a1d08}
 .endpanel .nirv-note{display:block;font-size:9px;line-height:1.25;color:#6b4a2e;opacity:.8}
+/* Story Mode finale: keep the nativity painting visible behind a compact panel at the bottom */
+#endP{background:linear-gradient(180deg,rgba(0,0,0,0) 45%,rgba(10,14,40,.45));align-items:flex-end;justify-content:center;padding-bottom:max(14px,env(safe-area-inset-bottom))}
+#endP .endpanel{padding:10px 18px 8px;max-width:min(420px,calc(100vw - 24px));animation:endUp .8s ease-out both}
+#endP .endstar{font-size:26px}
+#endP h2{margin:0;font-size:clamp(26px,7vw,34px)}
+#endP .merry{font-size:clamp(20px,5.5vw,26px);margin:0 0 4px}
+#endP .endverse{font-size:12.5px;margin:0 0 2px}
+#endP>.panel{margin:auto auto 0}
+#endP .endbtns{margin:6px 0}
+@keyframes endUp{from{transform:translateY(40px);opacity:0}to{transform:none;opacity:1}}
+@media (max-width:500px){#endP .endpanel{padding:8px 12px 6px}#endP .endverse{font-size:11px}#endP .btn{padding:7px 14px;font-size:15px}#endP .endstar{display:none}}

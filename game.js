@@ -35,7 +35,7 @@ camera.position.set(0, 4.2, 7.5);
 // ---------- Textures ----------
 const loader = new THREE.TextureLoader();
 const aniso = renderer.capabilities.getMaxAnisotropy();
-const NAMES_ALL = ['tex_sandstone.jpg', 'tex_cobble.jpg', 'tex_facade1.jpg', 'tex_facade2.jpg', 'bg_bethlehem.jpg', ...['run0', 'run1', 'jump', 'slide', 'coin', 'scroll', 'lamp', 'sandals', 'shield', 'magnet', 'camel', 'donkey', 'cart', 'baskets', 'olive', 'palm', 'stall', 'pots', 'stable', 'gabriel', 'inn', 'shepherds', 'magi'].map(n => n + '.png')];
+const NAMES_ALL = ['tex_sandstone.jpg', 'tex_cobble.jpg', 'tex_facade1.jpg', 'tex_facade2.jpg', 'bg_bethlehem.jpg', ...['run0', 'run1', 'jump', 'slide', 'coin', 'scroll', 'lamp', 'sandals', 'shield', 'magnet', 'camel', 'donkey', 'cart', 'baskets', 'olive', 'palm', 'stall', 'pots', 'stable', 'gabriel', 'inn', 'shepherds', 'magi', 'finale'].map(n => n + '.png')];
 const CACHE = {};
 await Promise.all(NAMES_ALL.map(async n => { CACHE[n] = await loader.loadAsync('assets/' + n); }));
 function load(name, rx = 1, ry = 1) {
@@ -56,7 +56,7 @@ const TX = {
   facades: [load('tex_facade1.jpg'), load('tex_facade2.jpg')], bg: load('bg_bethlehem.jpg'),
 };
 const SPR = {};
-for (const n of ['run0', 'run1', 'jump', 'slide', 'coin', 'scroll', 'lamp', 'sandals', 'shield', 'magnet', 'camel', 'donkey', 'cart', 'baskets', 'olive', 'palm', 'stall', 'pots', 'stable', 'gabriel', 'inn', 'shepherds', 'magi']) SPR[n] = load(n + '.png');
+for (const n of ['run0', 'run1', 'jump', 'slide', 'coin', 'scroll', 'lamp', 'sandals', 'shield', 'magnet', 'camel', 'donkey', 'cart', 'baskets', 'olive', 'palm', 'stall', 'pots', 'stable', 'gabriel', 'inn', 'shepherds', 'magi', 'finale']) SPR[n] = load(n + '.png');
 function sandTex(w, h) { const t = TX.sand.clone(); t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(Math.max(1, w / 3.5), Math.max(1, h / 3.5)); t.needsUpdate = true; return t; }
 
 // Toon gradient (soft 3-band painted shading)
@@ -307,7 +307,8 @@ const stable = { g: new THREE.Group(), active: false, z: 0, side: 1, reached: fa
   const beam = new THREE.Mesh(beamG, noOutline(new THREE.MeshBasicMaterial({ vertexColors: true, transparent: true, opacity: 0.2, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide, fog: false })));
   g.add(beam); stable.beam = beam;
 }
-function spawnStable() { const { sc } = storyAt(stable.idx); stable.sc = sc; for (const k in stable.sprs) stable.sprs[k].visible = k === sc.key; stable.spr = stable.sprs[sc.key];
+function spawnStable() { if (!S.story) for (const o of obstacles) if (o.z < -55) { o.g.visible = false; o.z = 99; }
+  const { sc } = storyAt(stable.idx); stable.sc = sc; for (const k in stable.sprs) stable.sprs[k].visible = k === sc.key; stable.spr = stable.sprs[sc.key];
   stable.star.visible = stable.beam.visible = sc.star; stable.straw.visible = stable.warm.visible = sc.key === 'stable' || sc.key === 'inn';
   stable.active = true; stable.reached = false; stable.side = Math.random() < 0.5 ? -1 : 1; stable.z = STABLE_SPAWN_Z; stable.g.position.set(stable.side * 8.0, 0, stable.z); stable.spr.userData.fixed = -stable.side * 0.45; stable.g.visible = true; }
 function hideStable() { stable.active = false; stable.g.visible = false; for (const seg of segments) { seg.L.forEach((o, k) => o.visible = k === seg.a); seg.R.forEach((o, k) => o.visible = k === seg.b); } }
@@ -323,12 +324,29 @@ function updateStable(dz, t) {
 }
 function reachStable() {
   const sc = stable.sc, bonus = sc.bonus * S.mult; S.score += bonus; S.coins += sc.coins;
-  Sfx.power(); emit(stable.side * 5, 3, -1, 80, 0xffe066, 9, 0.6, 1.2, 3);
+  Sfx.power(); Sfx.narrate(sc); emit(stable.side * 5, 3, -1, 80, 0xffe066, 9, 0.6, 1.2, 3);
   const b = $('banner'); b.innerHTML = `<b>${sc.title}</b><span>${sc.verse} ${sc.ref} (NIrV)</span><i>+${bonus.toLocaleString()} &bull; +${sc.coins} coins</i>`;
-  b.classList.add('show'); bannerT = S.story ? 6.5 : 4.2;
-  if (S.story && sc.key === STORY[STORY.length - 1].key) S.endT = 7.5;
+  b.classList.add('show'); bannerT = S.story ? 9 : 7;
 }
 let bannerT = 0;
+// ---------- Story Mode finale: full nativity scene, ride slows to a stop in front of it ----------
+const FINALE = { key: 'finale', verse: '“May glory be given to God in the highest heaven! And may peace be given to those he is pleased with on earth!”', ref: 'Luke 2:14' };
+const finale = { g: new THREE.Group(), active: false, z: 0, stopped: false, t: 0, STOP_Z: -17 };
+{ const g = finale.g; g.visible = false; scene.add(g);
+  finale.spr = billboard('finale', 10, g, 0, 0);
+  const warm = glowSprite(0xffb040, 9); warm.position.set(0, 3.2, 0.5); g.add(warm); finale.warm = warm;
+  const st = new THREE.Sprite(new THREE.SpriteMaterial({ map: starTex, blending: THREE.AdditiveBlending, depthWrite: false, transparent: true, fog: false })); st.scale.set(14, 14, 1); st.position.set(0, 12.8, 0); g.add(st); finale.star = st; }
+function spawnFinale() { S.lane = 1; finale.active = true; finale.stopped = false; finale.t = 0; finale.z = -150; finale.g.position.set(0, 0, finale.z); finale.g.visible = true;
+  for (const o of obstacles) { o.g.visible = false; o.z = 99; } }
+function hideFinale() { finale.active = false; finale.g.visible = false; }
+function updateFinale(dz, dt, t) {
+  if (!finale.active) return;
+  finale.z += dz; finale.g.position.z = finale.z;
+  for (const seg of segments) { const sz = seg.g.position.z; if (sz < finale.z + 14) { seg.arch.visible = seg.gate.visible = seg.banner.visible = false; seg.L.forEach(o => o.visible = false); seg.R.forEach(o => o.visible = false); } }
+  const tw = 14 * (1 + Math.sin(t * 4) * 0.06); finale.star.scale.set(tw, tw, 1); finale.warm.material.opacity = 0.55 + Math.sin(t * 2.5) * 0.12;
+  if (!finale.stopped && finale.z >= finale.STOP_Z - 0.05) { finale.stopped = true; finale.z = finale.STOP_Z; Sfx.narrate(FINALE); emit(0, 4, finale.z + 2, 90, 0xffe066, 9, 0.6, 1.4, 3); }
+  if (finale.stopped && S.state === 'play') { finale.t += dt; if (finale.t > 6.5) storyEnd(); }
+}
 // ---------- Weather phases (distance-driven snow cycle) ----------
 // per 1500-mile story cycle: snow between Gabriel (300) and the inn (600), again between the shepherds (900) and the stable;
 // clear starry sky for the shepherds, the stable (1200) and the Wise Men following the star (1500)
@@ -450,11 +468,12 @@ dust.frustumCulled = false; scene.add(dust);
 const Sfx = {
   ctx: null, master: null, muted: localStorage.getItem('bh_muted') === '1', musicT: null,
   // independent channels: music bus + sfx bus (+ coin toggle), all remembered in bh_ storage
-  cfg: { musicOn: localStorage.getItem('bh_musicOn') !== '0', musicVol: +(localStorage.getItem('bh_musicVol') ?? 0.7), sfxOn: localStorage.getItem('bh_sfxOn') !== '0', sfxVol: +(localStorage.getItem('bh_sfxVol') ?? 0.8), coinsOn: localStorage.getItem('bh_coinsOn') !== '0' },
-  saveCfg() { const c = this.cfg; localStorage.setItem('bh_musicOn', c.musicOn ? '1' : '0'); localStorage.setItem('bh_musicVol', c.musicVol); localStorage.setItem('bh_sfxOn', c.sfxOn ? '1' : '0'); localStorage.setItem('bh_sfxVol', c.sfxVol); localStorage.setItem('bh_coinsOn', c.coinsOn ? '1' : '0'); this.applyCfg(); },
+  cfg: { musicOn: localStorage.getItem('bh_musicOn') !== '0', musicVol: +(localStorage.getItem('bh_musicVol') ?? 0.7), sfxOn: localStorage.getItem('bh_sfxOn') !== '0', sfxVol: +(localStorage.getItem('bh_sfxVol') ?? 0.8), coinsOn: localStorage.getItem('bh_coinsOn') !== '0', narrOn: localStorage.getItem('bh_narrOn') !== '0', narrVol: +(localStorage.getItem('bh_narrVol') ?? 1) },
+  saveCfg() { const c = this.cfg; localStorage.setItem('bh_musicOn', c.musicOn ? '1' : '0'); localStorage.setItem('bh_musicVol', c.musicVol); localStorage.setItem('bh_sfxOn', c.sfxOn ? '1' : '0'); localStorage.setItem('bh_sfxVol', c.sfxVol); localStorage.setItem('bh_coinsOn', c.coinsOn ? '1' : '0'); localStorage.setItem('bh_narrOn', c.narrOn ? '1' : '0'); localStorage.setItem('bh_narrVol', c.narrVol); this.applyCfg(); if (!c.narrOn || this.muted) this.stopNarr(); },
   applyCfg() { if (!this.ctx) return; const c = this.cfg, t = this.ctx.currentTime;
     this.master.gain.setTargetAtTime(this.muted ? 0 : 0.6, t, 0.02);
-    this.music.gain.setTargetAtTime(c.musicOn ? 0.32 * c.musicVol : 0, t, 0.05);
+    this.music.gain.setTargetAtTime(c.musicOn ? 0.32 * c.musicVol * (this.ducked ? 0.3 : 1) : 0, t, this.ducked ? 0.12 : 0.4);
+    this.narr.gain.setTargetAtTime(c.narrOn ? 1.6 * c.narrVol : 0, t, 0.05);
     this.sfx.gain.setTargetAtTime(c.sfxOn ? c.sfxVol : 0, t, 0.02); },
   live: 0,
   init() {
@@ -464,7 +483,10 @@ const Sfx = {
     this.hp = this.ctx.createBiquadFilter(); this.hp.type = 'highpass'; this.hp.frequency.value = 120; this.hp.Q.value = 0.7;
     this.master.connect(this.hp); this.hp.connect(this.ctx.destination);
     this.music = this.ctx.createGain(); this.music.gain.value = 0.32; this.music.connect(this.master);
-    this.sfx = this.ctx.createGain(); this.sfx.gain.value = 1; this.sfx.connect(this.master); this.applyCfg();
+    this.sfx = this.ctx.createGain(); this.sfx.gain.value = 1; this.sfx.connect(this.master);
+    this.narr = this.ctx.createGain(); this.narr.gain.value = 1; this.narr.connect(this.master); this.applyCfg(); this.loadNarr();
+    // iOS: play a silent buffer inside the first tap so the context is unlocked
+    try { const sb = this.ctx.createBufferSource(); sb.buffer = this.ctx.createBuffer(1, 1, 22050); sb.connect(this.ctx.destination); sb.start(0); } catch (e) {} if (this.ctx.state === 'suspended') this.ctx.resume();
     const len = this.ctx.sampleRate; this.noise = this.ctx.createBuffer(1, len, len); const d = this.noise.getChannelData(0); for (let i = 0; i < len; i++) d[i] = Math.random() * 2 - 1;
   },
   _track(node, ...chain) { this.live++; node.onended = () => { this.live--; node.disconnect(); chain.forEach(n => n.disconnect()); }; },
@@ -503,7 +525,18 @@ const Sfx = {
   power() { [523, 659, 784, 1046, 1318].forEach((f, i) => this.tone(f, 0.35, 'sawtooth', 0.05, null, i * 0.07)); this.tone(1046, 0.8, 'sine', 0.1, null, 0.35); },
   crash() { this.noiseHit(0.6, 900, 0.5, 'lowpass', 80); this.tone(220, 0.4, 'triangle', 0.1, 130); },
   shieldBreak() { this.noiseHit(0.4, 4000, 0.25, 'highpass', 800); this.tone(880, 0.4, 'sine', 0.12, 220); },
-  setMuted(m) { this.muted = m; localStorage.setItem('bh_muted', m ? '1' : '0'); this.applyCfg(); },
+  setMuted(m) { this.muted = m; localStorage.setItem('bh_muted', m ? '1' : '0'); this.applyCfg(); if (m) this.stopNarr(); },
+  // ---- narration: pre-rendered neural TTS clips on their own bus, ducks the music while speaking ----
+  narrBuf: {}, narrSrc: null, ducked: false, narrLog: [],
+  loadNarr() { for (const sc of [...STORY, FINALE]) { const k = sc.key, url = (window.__NARR && window.__NARR[k]) || ('narr/' + k + '.mp3');
+    fetch(url).then(r => r.arrayBuffer()).then(ab => new Promise((ok, bad) => this.ctx.decodeAudioData(ab, ok, bad))).then(b => { this.narrBuf[k] = b; }).catch(() => {}); } },
+  stopNarr() { if (this.narrSrc) { try { this.narrSrc.onended = null; this.narrSrc.stop(); } catch (e) {} this.narrSrc = null; } if (window.speechSynthesis) speechSynthesis.cancel(); this.duck(false); },
+  duck(on) { this.ducked = on; this.applyCfg(); },
+  narrate(sc) { if (!this.ctx || this.muted || !this.cfg.narrOn) return; this.stopNarr(); if (this.ctx.state === 'suspended') this.ctx.resume();
+    const b = this.narrBuf[sc.key];
+    if (b) { const src = this.ctx.createBufferSource(); src.buffer = b; src.connect(this.narr); src.onended = () => { if (this.narrSrc === src) { this.narrSrc = null; this.duck(false); } }; src.start(this.ctx.currentTime + 0.05); this.narrSrc = src; this.duck(true); this.narrLog.push({ key: sc.key, via: 'buffer', dur: b.duration }); return; }
+    if (window.speechSynthesis && window.SpeechSynthesisUtterance) { // fallback only if a clip failed to load
+      const u = new SpeechSynthesisUtterance(sc.verse.replace(/[“”…]/g, ' ') + ' ' + sc.ref); u.rate = 0.88; u.volume = Math.min(1, this.cfg.narrVol); u.onend = () => this.duck(false); this.duck(true); speechSynthesis.speak(u); this.narrLog.push({ key: sc.key, via: 'speech' }); } },
   startMusic() {
     if (!this.ctx || this.musicT) return;
     // Public-domain carols, arranged here as gentle plucked-lyre melodies (all notes >= C4, bass >= C3)
@@ -571,9 +604,9 @@ function clearWorld() {
 }
 function resetRun() {
   clearWorld();
-  Object.assign(S, { endT: 0, lane: 1, x: 0, y: 0, vy: 0, sliding: 0, speed: BASE_SPEED, dist: 0, score: 0, coins: 0, mult: 1, runT: 0, dead: 0, shake: 0, invuln: 0, nextRow: -45 });
+  Object.assign(S, { slowK: 0, endT: 0, lane: 1, x: 0, y: 0, vy: 0, sliding: 0, speed: BASE_SPEED, dist: 0, score: 0, coins: 0, mult: 1, runT: 0, dead: 0, shake: 0, invuln: 0, nextRow: -45 });
   if (Q.has('start')) S.dist = +Q.get('start') || 0;
-  hideStable(); stable.idx = storyIndexFrom(S.dist); W.snow = snowTarget(S.dist); bannerT = 0; $('banner').classList.remove('show');
+  hideStable(); hideFinale(); stable.idx = storyIndexFrom(S.dist); W.snow = snowTarget(S.dist); bannerT = 0; $('banner').classList.remove('show');
   S.power = { sandals: 0, shield: 0, magnet: 0 };
   player.position.set(0, 0, 0); P.body.rotation.set(0, 0, 0);
   // pre-populate
@@ -592,6 +625,8 @@ function spawnRow(z) {
   const d = S.dist;
   const r = Math.random();
   const lanes = [0, 1, 2].sort(() => Math.random() - 0.5);
+  if (!S.story && (stable.active || S.dist >= storyAt(stable.idx).d - STORY_LEAD - 70)) { // slow scenic zone: coins only, no obstacles
+    if (Math.random() < 0.6) coinLine(1, z - 6, 5); return; }
   if (S.story) { // center lane always open: coins down the middle, a few harmless roadside props in the side lanes
     if (Math.random() < 0.7) coinLine(1, z - 6, 5);
     if (Math.random() < 0.35) spawnOb(pick(['baskets', 'cart']), Math.random() < 0.5 ? 0 : 2, z);
@@ -653,13 +688,13 @@ addEventListener('touchend', () => { tStart = null; });
 function show(id, on) { $(id).classList.toggle('hidden', !on); }
 function startGame(story) {
   S.story = story === true; document.body.classList.toggle('storymode', S.story); show('endP', false);
-  Sfx.init(); Sfx.startMusic();
+  Sfx.init(); Sfx.stopNarr(); Sfx.startMusic();
   resetRun(); S.state = 'play';
   show('menu', false); show('over', false); show('paused', false); show('hud', true);
 }
-function storyEnd() { S.state = 'end'; $('banner').classList.remove('show'); bannerT = 0; show('endP', true); emit(0, 3, -4, 90, 0xffe066, 9, 0.6, 1.4, 3); }
+function storyEnd() { S.state = 'end'; S.slowK = 0; $('banner').classList.remove('show'); bannerT = 0; show('endP', true); }
 function gameOver() {
-  S.state = 'over'; Sfx.stopMusic();
+  S.state = 'over'; Sfx.stopMusic(); Sfx.stopNarr();
   const sc = Math.floor(S.score), nb = sc > S.best; if (nb) { S.best = sc; localStorage.setItem('bh_best', sc); }
   $('fScore').textContent = sc.toLocaleString(); $('fCoins').textContent = S.coins; $('fDist').textContent = Math.floor(S.dist) + " miles";
   $('bestOver').textContent = S.best.toLocaleString(); $('bestMenu').textContent = S.best.toLocaleString(); show('newBest', nb);
@@ -675,6 +710,7 @@ function toggleMute() { Sfx.init(); Sfx.setMuted(!Sfx.muted); syncSound(); } // 
 // ---------- Sound settings (title + pause), independent music / effects / coin sounds ----------
 function soundHTML() { return `<div class="sndrow"><label><input type="checkbox" data-k="musicOn"> Music</label><input type="range" min="0" max="1" step="0.05" data-k="musicVol" aria-label="Music volume"></div>
 <div class="sndrow"><label><input type="checkbox" data-k="sfxOn"> Sound effects</label><input type="range" min="0" max="1" step="0.05" data-k="sfxVol" aria-label="Effects volume"></div>
+<div class="sndrow"><label><input type="checkbox" data-k="narrOn"> Narration</label><input type="range" min="0" max="1" step="0.05" data-k="narrVol" aria-label="Narration volume"></div>
 <div class="sndrow"><label><input type="checkbox" data-k="coinsOn"> Coin sounds</label><label class="allm"><input type="checkbox" data-k="muted"> Mute all</label></div>`; }
 for (const el of document.querySelectorAll('.sndbox')) el.innerHTML = soundHTML();
 function syncSound() {
@@ -688,7 +724,7 @@ for (const ev of ['touchstart', 'touchmove', 'touchend', 'pointerdown', 'mousedo
 syncSound();
 $('playBtn').onclick = () => startGame(false); $('againBtn').onclick = () => startGame(S.story);
 $('storyBtn').onclick = () => startGame(true); $('endAgain').onclick = () => startGame(true);
-$('endMenu').onclick = () => { show('endP', false); show('hud', false); show('menu', true); S.state = 'menu'; S.story = false; document.body.classList.remove('storymode'); clearWorld(); hideStable(); };
+$('endMenu').onclick = () => { show('endP', false); show('hud', false); show('menu', true); S.state = 'menu'; S.story = false; document.body.classList.remove('storymode'); clearWorld(); hideStable(); hideFinale(); Sfx.stopNarr(); };
 $('menuBtn').onclick = () => { show('over', false); show('hud', false); show('menu', true); S.state = 'menu'; clearWorld(); };
 $('resumeBtn').onclick = togglePause; $('pauseBtn').onclick = togglePause; $('muteBtn').onclick = toggleMute;
 $('verseToggle').onchange = e => { localStorage.setItem('bh_verse', e.target.checked ? '1' : '0'); show('verse', e.target.checked); };
@@ -720,9 +756,12 @@ function update(dt) {
     S.runT += dt;
     S.speed = S.story ? STORY_SPEED : Math.min(MAX_SPEED, BASE_SPEED + S.dist * 0.0075);
     speed = S.speed * (S.power.sandals > 0 && !S.story ? 1.45 : 1);
+    // ease into a slow cruise as a story scene nears, hold while passing, ease back out
+    { const inZone = stable.active && stable.z > -95 && stable.z < 22; S.slowK += ((inZone ? 1 : 0) - S.slowK) * (1 - Math.exp(-(inZone ? 1.3 : 0.8) * dt));
+      const cruise = S.story ? 5.5 : 9; speed = speed + (Math.min(speed, cruise) - speed) * S.slowK; }
+    if (finale.active) { const rem = finale.STOP_Z - finale.z; speed = finale.stopped ? 0 : Math.max(0.6, Math.min(speed, rem * 0.32)); if (rem < 0.6 && !finale.stopped) speed = rem / Math.max(dt, 1e-3); }
     S.dist += speed * dt;
     S.mult = S.story ? 1 : 1 + Math.floor(S.dist / 500) + (S.power.sandals > 0 ? 1 : 0);
-    if (S.endT > 0) { S.endT -= dt; if (S.endT <= 0) storyEnd(); }
     S.score += speed * dt * 0.5 * S.mult;
     for (const k in S.power) S.power[k] = Math.max(0, S.power[k] - dt);
     if (S.invuln > 0) S.invuln -= dt;
@@ -739,12 +778,13 @@ function update(dt) {
   { const tgt = (S.state === 'play' || S.state === 'over' || S.state === 'paused' || S.state === 'end') ? snowTarget(S.dist) : 1; W.snow += (tgt - W.snow) * (1 - Math.exp(-0.8 * dt));
     dust.material.opacity = 0.9 * W.snow; dust.visible = W.snow > 0.01; skyStars.material.opacity = 0.55 + 0.4 * (1 - W.snow); }
   if (S.state === 'play' && !S.dead && !stable.active && S.dist >= storyAt(stable.idx).d - STORY_LEAD) { spawnStable(); stable.idx++; }
-  updateStable(dz, performance.now() / 1000);
+  if (S.story && S.state === 'play' && !finale.active && stable.idx >= STORY.length && !stable.active) spawnFinale();
+  updateStable(dz, performance.now() / 1000); updateFinale(dz, dt, performance.now() / 1000);
   if (bannerT > 0) { bannerT -= dt; if (bannerT <= 0) $('banner').classList.remove('show'); }
 
   if (playing || S.state === 'over' || S.state === 'paused') {
     // spawn
-    if (playing && !S.dead) { S.nextRow += dz; while (S.nextRow > -170) { spawnRow(S.nextRow); S.nextRow -= rowGap(); } }
+    if (playing && !S.dead && !finale.active) { S.nextRow += dz; while (S.nextRow > -170) { spawnRow(S.nextRow); S.nextRow -= rowGap(); } }
 
     // player physics
     if (!S.dead) {
@@ -865,4 +905,4 @@ const _wp = new THREE.Vector3(); let sdt = 1 / 60; if (Q.has('nooutline')) useOu
 S.state = 'menu'; show('loading', false);
 // spawn a few attract-mode items on menu
 frame();
-window.__game = { storyEnd, STORY, stable, W, camera, S, startGame, act, Sfx, renderer };
+window.__game = { finale, storyEnd, STORY, stable, W, camera, S, startGame, act, Sfx, renderer };
