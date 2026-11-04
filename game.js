@@ -905,4 +905,4 @@ const _wp = new THREE.Vector3(); let sdt = 1 / 60; if (Q.has('nooutline')) useOu
 S.state = 'menu'; show('loading', false);
 // spawn a few attract-mode items on menu
 frame();
-window.__game = { finale, storyEnd, STORY, stable, W, camera, S, startGame, act, Sfx, renderer };
+window.__game = { finale, storyEnd, STORY, stable, obstacles, W, camera, S, startGame, act, Sfx, renderer };
