@@ -83,3 +83,15 @@ blockquote cite{display:block;font:700 14px 'Fredoka';font-style:normal;margin-t
 #banner b{display:block;font:800 clamp(24px,6vw,36px)/1.05 'Baloo 2',sans-serif;color:#d8322a;-webkit-text-stroke:1px #3a1d08}
 #banner span{display:block;font:600 clamp(13px,3.4vw,16px)/1.3 'Fredoka',sans-serif;color:#3a1d08;margin:6px 0 4px}
 #banner i{display:block;font:800 16px 'Baloo 2',sans-serif;font-style:normal;color:#2f7a3e}
+
+details.snd{display:inline-block;margin:8px auto 0;text-align:left}
+details.snd summary{list-style:none;cursor:pointer;display:inline-block;font:700 14px 'Fredoka',sans-serif;color:#fff4cf;background:rgba(58,29,8,.55);border:2px solid #ffd34d;border-radius:999px;padding:4px 14px}
+details.snd summary::-webkit-details-marker{display:none}
+details.snd[open] summary{margin-bottom:6px}
+.sndbox{background:#fff4cf;border:3px solid #6b4a2e;border-radius:14px;box-shadow:0 3px 0 #3a1d08;padding:6px 12px;font:600 14px 'Fredoka',sans-serif;color:#3a1d08;min-width:250px;text-align:left}
+#paused .sndbox{margin:4px auto 14px;max-width:300px}
+.sndrow{display:flex;align-items:center;justify-content:space-between;gap:10px;min-height:34px}
+.sndrow label{display:flex;align-items:center;gap:6px;cursor:pointer;white-space:nowrap}
+.sndrow input[type=checkbox]{width:20px;height:20px;accent-color:#2f7a3e}
+.sndrow input[type=range]{width:110px;accent-color:#f3b51c;touch-action:pan-x}
+.sndrow .allm{color:#d8322a}

@@ -433,6 +433,13 @@ dust.frustumCulled = false; scene.add(dust);
 // ---------- Audio (synthesized) ----------
 const Sfx = {
   ctx: null, master: null, muted: localStorage.getItem('bh_muted') === '1', musicT: null,
+  // independent channels: music bus + sfx bus (+ coin toggle), all remembered in bh_ storage
+  cfg: { musicOn: localStorage.getItem('bh_musicOn') !== '0', musicVol: +(localStorage.getItem('bh_musicVol') ?? 0.7), sfxOn: localStorage.getItem('bh_sfxOn') !== '0', sfxVol: +(localStorage.getItem('bh_sfxVol') ?? 0.8), coinsOn: localStorage.getItem('bh_coinsOn') !== '0' },
+  saveCfg() { const c = this.cfg; localStorage.setItem('bh_musicOn', c.musicOn ? '1' : '0'); localStorage.setItem('bh_musicVol', c.musicVol); localStorage.setItem('bh_sfxOn', c.sfxOn ? '1' : '0'); localStorage.setItem('bh_sfxVol', c.sfxVol); localStorage.setItem('bh_coinsOn', c.coinsOn ? '1' : '0'); this.applyCfg(); },
+  applyCfg() { if (!this.ctx) return; const c = this.cfg, t = this.ctx.currentTime;
+    this.master.gain.setTargetAtTime(this.muted ? 0 : 0.6, t, 0.02);
+    this.music.gain.setTargetAtTime(c.musicOn ? 0.32 * c.musicVol : 0, t, 0.05);
+    this.sfx.gain.setTargetAtTime(c.sfxOn ? c.sfxVol : 0, t, 0.02); },
   live: 0,
   init() {
     if (this.ctx) { if (this.ctx.state === 'suspended') this.ctx.resume(); return; }
@@ -441,6 +448,7 @@ const Sfx = {
     this.hp = this.ctx.createBiquadFilter(); this.hp.type = 'highpass'; this.hp.frequency.value = 120; this.hp.Q.value = 0.7;
     this.master.connect(this.hp); this.hp.connect(this.ctx.destination);
     this.music = this.ctx.createGain(); this.music.gain.value = 0.32; this.music.connect(this.master);
+    this.sfx = this.ctx.createGain(); this.sfx.gain.value = 1; this.sfx.connect(this.master); this.applyCfg();
     const len = this.ctx.sampleRate; this.noise = this.ctx.createBuffer(1, len, len); const d = this.noise.getChannelData(0); for (let i = 0; i < len; i++) d[i] = Math.random() * 2 - 1;
   },
   _track(node, ...chain) { this.live++; node.onended = () => { this.live--; node.disconnect(); chain.forEach(n => n.disconnect()); }; },
@@ -448,7 +456,7 @@ const Sfx = {
     if (!this.ctx) return; const t = this.ctx.currentTime + delay;
     const o = this.ctx.createOscillator(), g = this.ctx.createGain(); o.type = type; o.frequency.setValueAtTime(f, t); if (f2) o.frequency.exponentialRampToValueAtTime(f2, t + dur);
     g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(vol, t + 0.008); g.gain.exponentialRampToValueAtTime(0.0001, t + dur); g.gain.linearRampToValueAtTime(0, t + dur + 0.02);
-    o.connect(g); g.connect(dest || this.master); o.start(t); o.stop(t + dur + 0.04); this._track(o, g);
+    o.connect(g); g.connect(dest || this.sfx); o.start(t); o.stop(t + dur + 0.04); this._track(o, g);
   },
   pluck(f, t, vol = 0.12, dur = 0.5) { // lyre/oud-like: bright attack, filtered decay, short
     const c = this.ctx, o1 = c.createOscillator(), o2 = c.createOscillator(), lp = c.createBiquadFilter(), g = c.createGain();
@@ -469,9 +477,9 @@ const Sfx = {
     if (!this.ctx) return; const t = this.ctx.currentTime;
     const s = this.ctx.createBufferSource(); s.buffer = this.noise; const fl = this.ctx.createBiquadFilter(); fl.type = type; fl.frequency.setValueAtTime(f, t); if (f2) fl.frequency.exponentialRampToValueAtTime(f2, t + dur);
     const g = this.ctx.createGain(); g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(vol, t + 0.005); g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
-    s.connect(fl); fl.connect(g); g.connect(this.master); s.start(t); s.stop(t + dur + 0.02); this._track(s, fl, g);
+    s.connect(fl); fl.connect(g); g.connect(this.sfx); s.start(t); s.stop(t + dur + 0.02); this._track(s, fl, g);
   },
-  coin() { this.tone(1318, 0.12, 'sine', 0.12); this.tone(1976, 0.22, 'sine', 0.1, null, 0.06); },
+  coin() { if (!this.cfg.coinsOn) return; this.tone(1318, 0.09, 'sine', 0.03); this.tone(1976, 0.14, 'sine', 0.022, null, 0.05); }, // much softer by default
   jump() { this.noiseHit(0.25, 600, 0.15, 'bandpass', 2500); this.tone(220, 0.2, 'triangle', 0.08, 440); },
   slide() { this.noiseHit(0.35, 2000, 0.15, 'bandpass', 400); },
   lane() { this.noiseHit(0.12, 1500, 0.07, 'bandpass', 3000); },
@@ -479,7 +487,7 @@ const Sfx = {
   power() { [523, 659, 784, 1046, 1318].forEach((f, i) => this.tone(f, 0.35, 'sawtooth', 0.05, null, i * 0.07)); this.tone(1046, 0.8, 'sine', 0.1, null, 0.35); },
   crash() { this.noiseHit(0.6, 900, 0.5, 'lowpass', 80); this.tone(220, 0.4, 'triangle', 0.1, 130); },
   shieldBreak() { this.noiseHit(0.4, 4000, 0.25, 'highpass', 800); this.tone(880, 0.4, 'sine', 0.12, 220); },
-  setMuted(m) { this.muted = m; localStorage.setItem('bh_muted', m ? '1' : '0'); if (this.master) this.master.gain.value = m ? 0 : 0.6; },
+  setMuted(m) { this.muted = m; localStorage.setItem('bh_muted', m ? '1' : '0'); this.applyCfg(); },
   startMusic() {
     if (!this.ctx || this.musicT) return;
     // Public-domain carols, arranged here as gentle plucked-lyre melodies (all notes >= C4, bass >= C3)
@@ -639,11 +647,24 @@ function togglePause() {
   if (S.state === 'play') { S.state = 'paused'; show('paused', true); if (Sfx.ctx) Sfx.ctx.suspend(); }
   else if (S.state === 'paused') { S.state = 'play'; show('paused', false); if (Sfx.ctx) Sfx.ctx.resume(); }
 }
-function toggleMute() { Sfx.init(); Sfx.setMuted(!Sfx.muted); $('muteBtn').style.opacity = Sfx.muted ? 0.4 : 1; }
+function toggleMute() { Sfx.init(); Sfx.setMuted(!Sfx.muted); syncSound(); } // M / ♫ button = mute ALL
+// ---------- Sound settings (title + pause), independent music / effects / coin sounds ----------
+function soundHTML() { return `<div class="sndrow"><label><input type="checkbox" data-k="musicOn"> Music</label><input type="range" min="0" max="1" step="0.05" data-k="musicVol" aria-label="Music volume"></div>
+<div class="sndrow"><label><input type="checkbox" data-k="sfxOn"> Sound effects</label><input type="range" min="0" max="1" step="0.05" data-k="sfxVol" aria-label="Effects volume"></div>
+<div class="sndrow"><label><input type="checkbox" data-k="coinsOn"> Coin sounds</label><label class="allm"><input type="checkbox" data-k="muted"> Mute all</label></div>`; }
+for (const el of document.querySelectorAll('.sndbox')) el.innerHTML = soundHTML();
+function syncSound() {
+  for (const inp of document.querySelectorAll('.sndbox input')) { const k = inp.dataset.k; if (k === 'muted') inp.checked = Sfx.muted; else if (inp.type === 'checkbox') inp.checked = Sfx.cfg[k]; else inp.value = Sfx.cfg[k]; }
+  $('muteBtn').style.opacity = Sfx.muted ? 0.4 : 1;
+}
+document.addEventListener('input', e => { const inp = e.target; if (!inp.closest || !inp.closest('.sndbox')) return; const k = inp.dataset.k;
+  Sfx.init(); if (k === 'muted') Sfx.setMuted(inp.checked); else { Sfx.cfg[k] = inp.type === 'checkbox' ? inp.checked : +inp.value; Sfx.saveCfg(); }
+  if ((k === 'coinsOn' && inp.checked) || k === 'sfxVol') Sfx.coin(); if (inp.type === 'checkbox') inp.blur(); syncSound(); });
+for (const ev of ['touchstart', 'touchmove', 'touchend', 'pointerdown', 'mousedown']) document.addEventListener(ev, e => { if (e.target.closest && e.target.closest('.snd, .sndbox')) e.stopPropagation(); }, { capture: true, passive: true });
+syncSound();
 $('playBtn').onclick = startGame; $('againBtn').onclick = startGame;
 $('menuBtn').onclick = () => { show('over', false); show('hud', false); show('menu', true); S.state = 'menu'; clearWorld(); };
 $('resumeBtn').onclick = togglePause; $('pauseBtn').onclick = togglePause; $('muteBtn').onclick = toggleMute;
-$('muteBtn').style.opacity = Sfx.muted ? 0.4 : 1;
 $('verseToggle').onchange = e => { localStorage.setItem('bh_verse', e.target.checked ? '1' : '0'); show('verse', e.target.checked); };
 $('bestMenu').textContent = S.best.toLocaleString();
 let toastT = 0;
