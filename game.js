@@ -35,7 +35,7 @@ camera.position.set(0, 4.2, 7.5);
 // ---------- Textures ----------
 const loader = new THREE.TextureLoader();
 const aniso = renderer.capabilities.getMaxAnisotropy();
-const NAMES_ALL = ['tex_sandstone.jpg', 'tex_cobble.jpg', 'tex_facade1.jpg', 'tex_facade2.jpg', 'bg_bethlehem.jpg', ...['run0', 'run1', 'jump', 'slide', 'coin', 'scroll', 'lamp', 'sandals', 'shield', 'magnet', 'camel', 'donkey', 'cart', 'baskets', 'olive', 'palm', 'stall', 'pots'].map(n => n + '.png')];
+const NAMES_ALL = ['tex_sandstone.jpg', 'tex_cobble.jpg', 'tex_facade1.jpg', 'tex_facade2.jpg', 'bg_bethlehem.jpg', ...['run0', 'run1', 'jump', 'slide', 'coin', 'scroll', 'lamp', 'sandals', 'shield', 'magnet', 'camel', 'donkey', 'cart', 'baskets', 'olive', 'palm', 'stall', 'pots', 'stable'].map(n => n + '.png')];
 const CACHE = {};
 await Promise.all(NAMES_ALL.map(async n => { CACHE[n] = await loader.loadAsync('assets/' + n); }));
 function load(name, rx = 1, ry = 1) {
@@ -56,7 +56,7 @@ const TX = {
   facades: [load('tex_facade1.jpg'), load('tex_facade2.jpg')], bg: load('bg_bethlehem.jpg'),
 };
 const SPR = {};
-for (const n of ['run0', 'run1', 'jump', 'slide', 'coin', 'scroll', 'lamp', 'sandals', 'shield', 'magnet', 'camel', 'donkey', 'cart', 'baskets', 'olive', 'palm', 'stall', 'pots']) SPR[n] = load(n + '.png');
+for (const n of ['run0', 'run1', 'jump', 'slide', 'coin', 'scroll', 'lamp', 'sandals', 'shield', 'magnet', 'camel', 'donkey', 'cart', 'baskets', 'olive', 'palm', 'stall', 'pots', 'stable']) SPR[n] = load(n + '.png');
 function sandTex(w, h) { const t = TX.sand.clone(); t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(Math.max(1, w / 3.5), Math.max(1, h / 3.5)); t.needsUpdate = true; return t; }
 
 // Toon gradient (soft 3-band painted shading)
@@ -109,7 +109,7 @@ const skyMat = noOutline(new THREE.ShaderMaterial({ side: THREE.BackSide, depthW
   fragmentShader: `varying vec3 vP; void main(){ float h=vP.y; vec3 c=mix(vec3(.20,.24,.48), vec3(.03,.07,.20), smoothstep(0.,.45,h)); gl_FragColor=vec4(pow(c,vec3(2.2)),1.); }` }));
 const sky = new THREE.Mesh(new THREE.SphereGeometry(700, 24, 12), skyMat); scene.add(sky);
 const backdrop = new THREE.Mesh(new THREE.PlaneGeometry(560, 315), noOutline(new THREE.MeshBasicMaterial({ map: TX.bg, fog: false, toneMapped: false })));
-backdrop.position.set(0, 95, -330); sky.renderOrder = -2; scene.add(backdrop);
+backdrop.scale.set(1.5, 1.12, 1); backdrop.position.set(0, 112, -330); sky.renderOrder = -2; scene.add(backdrop);
 // ---------- Star of Bethlehem (big, glowing, rayed) ----------
 const starTex = new THREE.CanvasTexture(makeCanvas(1024, (g, s) => {
   const c = s / 2;
@@ -133,7 +133,7 @@ const starHalo = new THREE.Sprite(new THREE.SpriteMaterial({ map: null, color: 0
 // ---------- Ground ----------
 const ground = new THREE.Mesh(new THREE.PlaneGeometry(10, 300), M.ground);
 ground.rotation.x = -Math.PI / 2; ground.position.set(0, 0, -130); ground.receiveShadow = true; scene.add(ground);
-const sideGround = new THREE.Mesh(new THREE.PlaneGeometry(400, 600), noOutline(toon({ color: 0xc8d2f0 })));
+const sideGround = new THREE.Mesh(new THREE.PlaneGeometry(400, 600), noOutline(toon({ color: 0x8e98c4 })));
 sideGround.rotation.x = -Math.PI / 2; sideGround.position.set(0, -0.02, -200); sideGround.receiveShadow = true; scene.add(sideGround);
 for (const s of [-1, 1]) { const g = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.22, 300), M.sandD); g.position.set(s * 4.85, 0.11, -130); g.receiveShadow = true; scene.add(g); }
 
@@ -271,13 +271,53 @@ for (let i = 0; i < SEG_N; i++) {
 }
 function randomizeSeg(seg, plain) {
   const a = (Math.random() * KINDS.length) | 0, b = (Math.random() * KINDS.length) | 0;
-  seg.L.forEach((o, k) => o.visible = k === a); seg.R.forEach((o, k) => o.visible = k === b);
+  seg.a = a; seg.b = b; seg.L.forEach((o, k) => o.visible = k === a); seg.R.forEach((o, k) => o.visible = k === b);
   gateCounter++;
   const gate = !plain && gateCounter % 18 === 0;
   seg.gate.visible = gate; seg.arch.visible = !gate && !plain && Math.random() < 0.14;
   seg.banner.visible = !gate && !seg.arch.visible && Math.random() < 0.4;
 }
 
+// ---------- Nativity stable set piece (distance milestones) ----------
+const STABLE_FIRST = 800, STABLE_EVERY = 1000, STABLE_SPAWN_Z = -200;
+const stable = { g: new THREE.Group(), active: false, z: 0, side: 1, reached: false, next: STABLE_FIRST };
+{
+  const g = stable.g; g.visible = false; scene.add(g);
+  stable.spr = billboard('stable', 8.2, g, 0, 0); stable.spr.castShadow = true;
+  // glowing straw / lantern warmth
+  const straw = glowSprite(0xffc04a, 3.6); straw.position.set(0, 1.5, 0.6); g.add(straw); stable.straw = straw;
+  const warm = glowSprite(0xff9a30, 6); warm.position.set(0, 3, 0.3); g.add(warm);
+  // star directly above + beam of light
+  const st = new THREE.Sprite(new THREE.SpriteMaterial({ map: starTex, blending: THREE.AdditiveBlending, depthWrite: false, transparent: true, fog: false })); st.scale.set(16, 16, 1); st.position.set(0, 21, 0); g.add(st); stable.star = st;
+  const beamG = new THREE.CylinderGeometry(0.35, 2.2, 14, 32, 1, true); beamG.translate(0, 7 + 7.5, 0);
+  const col = new Float32Array(beamG.attributes.position.count * 3); for (let i = 0; i < beamG.attributes.position.count; i++) { const t = (beamG.attributes.position.getY(i) - 7.5) / 14; const v = 0.25 + 0.75 * t; col[i * 3] = 1 * v; col[i * 3 + 1] = 0.9 * v; col[i * 3 + 2] = 0.6 * v; }
+  beamG.setAttribute('color', new THREE.BufferAttribute(col, 3));
+  const beam = new THREE.Mesh(beamG, noOutline(new THREE.MeshBasicMaterial({ vertexColors: true, transparent: true, opacity: 0.2, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide, fog: false })));
+  g.add(beam); stable.beam = beam;
+}
+function spawnStable() { stable.active = true; stable.reached = false; stable.side = Math.random() < 0.5 ? -1 : 1; stable.z = STABLE_SPAWN_Z; stable.g.position.set(stable.side * 8.0, 0, stable.z); stable.spr.userData.fixed = -stable.side * 0.45; stable.g.visible = true; }
+function hideStable() { stable.active = false; stable.g.visible = false; for (const seg of segments) { seg.L.forEach((o, k) => o.visible = k === seg.a); seg.R.forEach((o, k) => o.visible = k === seg.b); } }
+function updateStable(dz, t) {
+  if (!stable.active) return;
+  stable.z += dz; stable.g.position.z = stable.z;
+  // clear the houses on that side of the street so the stable sits roadside
+  for (const seg of segments) { const sz = seg.g.position.z; const near = sz > stable.z - 11 && sz < Math.max(stable.z + 11, stable.z < -8 ? 30 : -99); if (near) { seg.arch.visible = seg.gate.visible = seg.banner.visible = false; } const arr = stable.side < 0 ? seg.L : seg.R, k0 = stable.side < 0 ? seg.a : seg.b; arr.forEach((o, k) => o.visible = k === k0 && !near); }
+  stable.straw.material.opacity = 0.6 + Math.sin(t * 3) * 0.15; stable.beam.material.opacity = 0.18 + Math.sin(t * 1.7) * 0.04;
+  const tw = 16 * (1 + Math.sin(t * 4) * 0.06); stable.star.scale.set(tw, tw, 1);
+  if (!stable.reached && stable.z > -1 && S.state === 'play' && !S.dead) { stable.reached = true; reachStable(); }
+  if (stable.z > 30) hideStable();
+}
+function reachStable() {
+  const bonus = 1000 * S.mult; S.score += bonus; S.coins += 25;
+  Sfx.power(); emit(stable.side * 5, 3, -1, 80, 0xffe066, 9, 0.6, 1.2, 3);
+  const b = $('banner'); b.innerHTML = `<b>You reached the stable!</b><span>“Today in the town of David a Savior has been born to you.” Luke 2:11 (NIrV)</span><i>+${bonus.toLocaleString()} &bull; +25 coins</i>`;
+  b.classList.add('show'); bannerT = 4.2;
+}
+let bannerT = 0;
+// ---------- Weather phases (distance-driven snow cycle) ----------
+// per 1000-mile cycle: clear start, snow from 150 to 620, clear starry sky around the stable (800), repeat
+function snowTarget(d) { const c = d % STABLE_EVERY; return (c > 150 && c < 620) ? 1 : 0; }
+const W = { snow: 0 };
 // ---------- Player (painted billboard sprite) ----------
 const player = new THREE.Group(); scene.add(player);
 const P = {};
@@ -442,22 +482,34 @@ const Sfx = {
   setMuted(m) { this.muted = m; localStorage.setItem('bh_muted', m ? '1' : '0'); if (this.master) this.master.gain.value = m ? 0 : 0.6; },
   startMusic() {
     if (!this.ctx || this.musicT) return;
-    // G major pentatonic, cheerful storybook tune; 8th notes at ~126 bpm, scheduled ahead
-    const N = { G3: 196, A3: 220, B3: 246.9, D4: 293.7, E4: 329.6, G4: 392, A4: 440, B4: 493.9, D5: 587.3, E5: 659.3, G5: 784 };
-    const mel = ['G4', 'B4', 'D5', 'B4', 'E5', 'D5', 'B4', 'A4', 'G4', 'A4', 'B4', 'D5', 'B4', 'A4', 'G4', '-',
-                 'E4', 'G4', 'A4', 'B4', 'A4', 'G4', 'E4', 'D4', 'E4', 'G4', 'A4', 'B4', 'D5', 'E5', 'D5', '-',
-                 'G5', 'E5', 'D5', 'B4', 'D5', 'B4', 'A4', 'G4', 'A4', 'B4', 'A4', 'G4', 'E4', 'D4', 'E4', '-',
-                 'D4', 'E4', 'G4', 'A4', 'B4', 'D5', 'B4', 'A4', 'G4', 'B4', 'A4', 'E4', 'G4', '-', 'G4', '-'];
-    const bass = ['G3', 'D4', 'E4', 'B3', 'A3', 'E4', 'D4', 'G3'];
-    const step = 60 / 126 / 2; let i = 0, next = this.ctx.currentTime + 0.1;
+    // Public-domain carols, arranged here as gentle plucked-lyre melodies (all notes >= C4, bass >= C3)
+    // format: 'NOTE:len' in 16ths, '-' = rest; bass: one root per bar
+    const SONGS = [
+      { name: 'Joy to the World', bpm: 92, bar: 16, mel: 'C5:4 B4:3 A4:1 G4:6 F4:2 E4:4 D4:4 C4:6 G4:2 A4:6 A4:2 B4:6 B4:2 C5:12 -:4 C5:2 C5:2 B4:2 A4:2 G4:3 F4:1 E4:2 C5:2 C5:2 B4:2 A4:2 G4:3 F4:1 E4:2 E4:2 E4:2 E4:2 E4:2 E4:2 F4:1 G4:7 F4:1 E4:1 D4:2 D4:2 D4:2 D4:1 E4:1 F4:6 E4:1 D4:1 C4:2 C5:4 A4:2 G4:3 F4:1 E4:2 F4:2 E4:4 D4:4 C4:12 -:4',
+        bass: 'C3 C3 F3 G3 C3 C3 C3 C3 C3 G3 G3 F3 G3 C3 C3' },
+      { name: 'Silent Night', bpm: 66, bar: 12, mel: 'G4:3 A4:1 G4:2 E4:6 G4:3 A4:1 G4:2 E4:6 D5:4 D5:2 B4:6 C5:4 C5:2 G4:6 A4:4 A4:2 C5:3 B4:1 A4:2 G4:3 A4:1 G4:2 E4:6 A4:4 A4:2 C5:3 B4:1 A4:2 G4:3 A4:1 G4:2 E4:6 D5:4 D5:2 F5:3 D5:1 B4:2 C5:6 E5:6 C5:3 G4:1 E4:2 G4:3 F4:1 D4:2 C4:12 -:12',
+        bass: 'C3 C3 C3 C3 G3 G3 C3 C3 F3 F3 C3 C3 F3 F3 C3 C3 G3 G3 C3 C3 C3 G3 C3 C3' },
+      { name: 'O Come, All Ye Faithful', bpm: 88, bar: 16, mel: '-:12 G4:4 G4:8 D4:4 G4:4 A4:8 D4:8 B4:4 A4:4 B4:4 C5:4 B4:8 A4:4 G4:4 G4:8 F#4:4 E4:4 F#4:4 G4:4 A4:4 B4:4 F#4:8 E4:6 D4:2 D4:16 D5:8 C5:4 B4:4 C5:8 B4:8 A4:4 B4:4 G4:4 A4:4 F#4:6 E4:2 D4:4 G4:4 G4:4 F#4:4 G4:4 A4:4 G4:8 D4:4 B4:4 B4:4 A4:4 B4:4 C5:4 B4:8 A4:4 B4:4 C5:4 B4:4 A4:4 G4:4 F#4:8 G4:4 C5:4 B4:8 A4:6 G4:2 G4:16',
+        bass: 'G3 G3 D3 G3 G3 C3 G3 D3 D3 G3 C3 G3 D3 D3 G3 G3 G3 G3 C3 D3 G3' },
+    ];
+    const A4 = 440, SEMI = { C: -9, 'C#': -8, D: -7, 'D#': -6, E: -5, F: -4, 'F#': -3, G: -2, 'G#': -1, A: 0, 'A#': 1, B: 2 };
+    const fq = n => { const m = n.match(/^([A-G]#?)(\d)$/); return A4 * Math.pow(2, (SEMI[m[1]] + (+m[2] - 4) * 12) / 12); };
+    const ev = []; let T = 0; // build one long loop: [time16, freq, len16, kind]
+    for (const sg of SONGS) {
+      const k = 126 / sg.bpm; // scale so each song keeps its own tempo on the shared 16th grid
+      let t = 0; for (const tok of sg.mel.split(' ')) { const [n, l] = tok.split(':'); if (n !== '-') ev.push([T + t * k, fq(n), +l * k, 'm']); t += +l; }
+      const bars = sg.bass.split(' '); for (let b = 0; b * sg.bar < t; b++) { const r = bars[b % bars.length]; ev.push([T + b * sg.bar * k, fq(r), sg.bar * k, 'b']); ev.push([T + (b * sg.bar + sg.bar / 2) * k, fq(r) * 1.5, sg.bar * k / 2, 'b']); }
+      T += (t + 8) * k; // short breath between carols
+    }
+    ev.sort((a, b) => a[0] - b[0]);
+    const s16 = 60 / 126 / 4; let i = 0, loop = 0, t0 = this.ctx.currentTime + 0.15;
     const tick = () => {
-      while (next < this.ctx.currentTime + 0.3) {
-        const n = mel[i % mel.length]; if (n !== '-') this.pluck(N[n], next, 0.1, 0.45);
-        if (i % 4 === 0) this.pluck(N[bass[(i / 4 | 0) % bass.length]], next, 0.07, 0.6);
-        if (i % 8 === 0 || i % 8 === 3) this.drum(next, 380, 1.2, 0.22, 0.12);   // dum
-        if (i % 2 === 1) this.drum(next, 3500, 2, 0.08, 0.05);                   // tek
-        if (i % 8 === 6) this.drum(next, 2200, 1.5, 0.12, 0.07);
-        i++; next += step;
+      const now = this.ctx.currentTime;
+      while (true) {
+        if (i >= ev.length) { i = 0; loop++; t0 += T * s16; }
+        const e = ev[i], at = t0 + e[0] * s16; if (at > now + 0.35) break;
+        if (at > now - 0.05) { if (e[3] === 'm') { this.pluck(e[1], at, 0.1, Math.min(1.4, 0.35 + e[2] * s16 * 0.9)); this.pluck(e[1] * 2, at, 0.018, 0.5); } else this.pluck(e[1], at, 0.05, Math.min(1.6, e[2] * s16)); }
+        i++;
       }
     };
     tick(); this.musicT = setInterval(tick, 100);
@@ -496,6 +548,8 @@ function clearWorld() {
 function resetRun() {
   clearWorld();
   Object.assign(S, { lane: 1, x: 0, y: 0, vy: 0, sliding: 0, speed: BASE_SPEED, dist: 0, score: 0, coins: 0, mult: 1, runT: 0, dead: 0, shake: 0, invuln: 0, nextRow: -45 });
+  if (Q.has('start')) S.dist = +Q.get('start') || 0;
+  hideStable(); { let n = STABLE_FIRST; while (n - 190 < S.dist) n += STABLE_EVERY; stable.next = n; } W.snow = snowTarget(S.dist); bannerT = 0; $('banner').classList.remove('show');
   S.power = { sandals: 0, shield: 0, magnet: 0 };
   player.position.set(0, 0, 0); P.body.rotation.set(0, 0, 0);
   // pre-populate
@@ -631,9 +685,14 @@ function update(dt) {
   // world scroll
   TX.cobble.offset.y = (TX.cobble.offset.y + dz / (300 / 80)) % 1;
   for (const seg of segments) { seg.g.position.z += dz; if (seg.g.position.z > 10 + SEG_LEN) { seg.g.position.z -= SEG_N * SEG_LEN; randomizeSeg(seg, false); } }
-  for (let i = 0; i < DM; i++) { dPos[i * 3 + 2] += dz * 0.9; dPos[i * 3 + 1] -= dt * (0.9 + (i % 7) * 0.12); dPos[i * 3] += Math.sin(animT * 0.03 + i) * 0.004; if (dPos[i * 3 + 1] < 0) dPos[i * 3 + 1] += 8; if (dPos[i * 3 + 2] > 10) dPos[i * 3 + 2] -= 90; }
+  for (let i = 0; i < DM; i++) { dPos[i * 3 + 2] += dz * 0.9; dPos[i * 3 + 1] -= dt * (0.9 + (i % 7) * 0.12) * (0.4 + 0.6 * W.snow); dPos[i * 3] += Math.sin(animT * 0.03 + i) * 0.004; if (dPos[i * 3 + 1] < 0) dPos[i * 3 + 1] += 8; if (dPos[i * 3 + 2] > 10) dPos[i * 3 + 2] -= 90; }
   star.material.rotation = Math.sin(performance.now() * 0.0004) * 0.03; { const tw = 1 + Math.sin(performance.now() * 0.003) * 0.04; star.scale.set(175 * tw, 175 * tw, 1); }
   dGeo.attributes.position.needsUpdate = true;
+  { const tgt = (S.state === 'play' || S.state === 'over' || S.state === 'paused') ? snowTarget(S.dist) : 1; W.snow += (tgt - W.snow) * (1 - Math.exp(-0.8 * dt));
+    dust.material.opacity = 0.9 * W.snow; dust.visible = W.snow > 0.01; skyStars.material.opacity = 0.55 + 0.4 * (1 - W.snow); }
+  if (S.state === 'play' && !S.dead && !stable.active && S.dist >= stable.next - 190) { spawnStable(); stable.next += STABLE_EVERY; }
+  updateStable(dz, performance.now() / 1000);
+  if (bannerT > 0) { bannerT -= dt; if (bannerT <= 0) $('banner').classList.remove('show'); }
 
   if (playing || S.state === 'over' || S.state === 'paused') {
     // spawn
@@ -757,4 +816,4 @@ const _wp = new THREE.Vector3(); let sdt = 1 / 60; if (Q.has('nooutline')) useOu
 S.state = 'menu'; show('loading', false);
 // spawn a few attract-mode items on menu
 frame();
-window.__game = { camera, S, startGame, act, Sfx, renderer };
+window.__game = { stable, W, camera, S, startGame, act, Sfx, renderer };
