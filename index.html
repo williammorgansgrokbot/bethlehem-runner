@@ -1054,14 +1054,14 @@ function updateStable(dz, t) {
   for (const seg of segments) { const sz = seg.g.position.z; const near = sz > stable.z - 11 && sz < Math.max(stable.z + 11, stable.z < -8 ? 30 : -99); if (near) { seg.arch.visible = seg.gate.visible = seg.banner.visible = false; } const arr = stable.side < 0 ? seg.L : seg.R, k0 = stable.side < 0 ? seg.a : seg.b; arr.forEach((o, k) => o.visible = k === k0 && !near); }
   stable.straw.material.opacity = 0.6 + Math.sin(t * 3) * 0.15; stable.beam.material.opacity = 0.18 + Math.sin(t * 1.7) * 0.04;
   const tw = 16 * (1 + Math.sin(t * 4) * 0.06); stable.star.scale.set(tw, tw, 1);
-  if (!stable.reached && stable.z > -1 && S.state === 'play' && !S.dead) { stable.reached = true; reachStable(); }
+  if (!stable.reached && stable.z > (S.story ? -95 : -1) && S.state === 'play' && !S.dead) { stable.reached = true; reachStable(); }
   if (stable.z > 30) hideStable();
 }
 function reachStable() {
   const sc = stable.sc, bonus = sc.bonus * S.mult; S.score += bonus; S.coins += sc.coins;
   Sfx.power(); Sfx.narrate(sc); emit(stable.side * 5, 3, -1, 80, 0xffe066, 9, 0.6, 1.2, 3);
   const b = $('banner'); b.innerHTML = `<b>${sc.title}</b><span>${sc.verse} ${sc.ref} (NIrV)</span><i>+${bonus.toLocaleString()} &bull; +${sc.coins} coins</i>`;
-  b.classList.add('show'); bannerT = S.story ? 9 : 7;
+  b.classList.add('show'); bannerT = S.story ? 16 : 4.2;
 }
 let bannerT = 0;
 // ---------- Story Mode finale: full nativity scene, ride slows to a stop in front of it ----------
@@ -1360,8 +1360,6 @@ function spawnRow(z) {
   const d = S.dist;
   const r = Math.random();
   const lanes = [0, 1, 2].sort(() => Math.random() - 0.5);
-  if (!S.story && (stable.active || S.dist >= storyAt(stable.idx).d - STORY_LEAD - 70)) { // slow scenic zone: coins only, no obstacles
-    if (Math.random() < 0.6) coinLine(1, z - 6, 5); return; }
   if (S.story) { // center lane always open: coins down the middle, a few harmless roadside props in the side lanes
     if (Math.random() < 0.7) coinLine(1, z - 6, 5);
     if (Math.random() < 0.35) spawnOb(pick(['baskets', 'cart']), Math.random() < 0.5 ? 0 : 2, z);
@@ -1492,8 +1490,8 @@ function update(dt) {
     S.speed = S.story ? STORY_SPEED : Math.min(MAX_SPEED, BASE_SPEED + S.dist * 0.0075);
     speed = S.speed * (S.power.sandals > 0 && !S.story ? 1.45 : 1);
     // ease into a slow cruise as a story scene nears, hold while passing, ease back out
-    { const inZone = stable.active && stable.z > -95 && stable.z < 22; S.slowK += ((inZone ? 1 : 0) - S.slowK) * (1 - Math.exp(-(inZone ? 1.3 : 0.8) * dt));
-      const cruise = S.story ? 5.5 : 9; speed = speed + (Math.min(speed, cruise) - speed) * S.slowK; }
+    { const inZone = S.story && stable.active && stable.z > -95 && stable.z < 22; S.slowK += ((inZone ? 1 : 0) - S.slowK) * (1 - Math.exp(-(inZone ? 1.3 : 0.8) * dt));
+      const cruise = 5.5; speed = speed + (Math.min(speed, cruise) - speed) * S.slowK; }
     if (finale.active) { const rem = finale.STOP_Z - finale.z; speed = finale.stopped ? 0 : Math.max(0.6, Math.min(speed, rem * 0.32)); if (rem < 0.6 && !finale.stopped) speed = rem / Math.max(dt, 1e-3); }
     S.dist += speed * dt;
     S.mult = S.story ? 1 : 1 + Math.floor(S.dist / 500) + (S.power.sandals > 0 ? 1 : 0);
